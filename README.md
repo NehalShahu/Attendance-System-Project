@@ -1,26 +1,47 @@
-# Candidate kit
+# Employee Attendance & Analytics API
 
-Read in this order:
+A FastAPI + MongoDB backend for employee attendance. Employees punch in and out, HR can correct a day's record (with a history of every correction), and there are analytics endpoints for monthly summaries, department summaries, a late-comers leaderboard and a daily trend. It follows `openapi.yaml` and the business rules R1 to R10.
 
-1. `PROBLEM_STATEMENT.docx`: what you are asked to do, how it is evaluated.
-2. `openapi.yaml`: the API contract and the business rules (R1 - R10).
-3. `DATA_MODEL.md`: what is stored in MongoDB, with nine sample documents.
-4. `app/main.py`: the starter. Put **all** your code in this one file. It must start with `uvicorn app.main:app --port 8000`.
-5. `REVIEW.md`, `DECISIONS.md`: templates to fill in.
+## Requirements
 
-`sample_data/` holds the nine sample documents as MongoDB Extended JSON; `sample_seed.py` loads them. The grader's dataset is
-much larger and contains cases they do not show.
+- Python 3.11 or newer
+- MongoDB 6.0 or newer (tested on MongoDB 7.0)
 
-## Local setup
+## How to run
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env            # set MONGO_URI / MONGO_DB (local docker: docker run -p 27017:27017 mongo:7)
-python sample_seed.py
-uvicorn app.main:app --port 8000 --reload
-```
-MongoDB **6.0 or newer** is required (the grader uses 7.0). MongoDB Atlas free tier (M0) works.
+# 1. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-## Submit
-A public Git repository with `app/main.py`, `requirements.txt`, `REVIEW.md`, `DECISIONS.md` and a short `README.md`.
-No `.env`, no secrets, no Dockerfile.
+# 2. Install the dependencies
+pip install -r requirements.txt
+
+# 3. Set the database settings (real environment variables win over a local .env)
+export MONGO_URI="mongodb://localhost:27017"
+export MONGO_DB="attendance_db"
+
+# 4. Start the app (indexes are created automatically on startup)
+uvicorn app.main:app --port 8000
+```
+
+- Health check: `GET /health`
+- Interactive docs (Swagger): http://localhost:8000/docs
+- Optional: to load the sample data from the candidate kit, run `python sample_seed.py` from the kit folder.
+
+## Things to know
+
+- **One file.** All the code (endpoints, models, queries and pipelines) is in `app/main.py`.
+- **Indexes.** They are created at startup and are safe to run many times. I checked on about 100,000 records that the main queries use an index scan and no collection scan. You can see this yourself with `GET /admin/explain/{endpoint}`.
+- **No double punch-in.** A unique index on `(emp_code, date)` lets only one punch-in per employee per day succeed. The other request gets 409.
+- **No lost corrections.** `PATCH /attendance/{emp_code}/{date}` uses optimistic locking. If two people edit the same record at the same time, one succeeds and the other gets 409.
+- **Time zones.** The API uses integer epoch milliseconds. MongoDB stores UTC datetimes. Shifts and attendance dates use IST (UTC+05:30), including overnight shifts such as 22:00 to 06:00.
+
+## What is missing
+
+Nothing that I know of. All endpoints in `openapi.yaml` are implemented.
+
+## More documents
+
+- `REVIEW.md`: the defects I found in the starter code and how I fixed them.
+- `DECISIONS.md`: my answers about indexes, concurrency, ties, headcount and scaling.
